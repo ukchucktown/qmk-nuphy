@@ -16,6 +16,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include QMK_KEYBOARD_H
+#include "achordion.h"
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
@@ -64,3 +65,87 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	_______,				_______,   	_______,   	_______,  	_______,   	_______,   	_______,   	_______,   	SIDE_SPD,	SIDE_SPI,	_______,				_______,	SIDE_VAI,	_______,
 	_______,	_______,	_______,										_______, 							_______,	MO(4),   	_______,				SIDE_MOD,	SIDE_VAD,   SIDE_HUI)
 };
+
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+	if (!process_achordion(keycode, record)) {
+		return false;
+	}
+	return true;
+}
+
+void housekeeping_task_user(void) {
+	achordion_task();
+}
+
+static bool on_left_hand_custom(const keyrecord_t *record) {
+	// Split between G (col 5) and H (col 6) so H/J/K/L count as right hand.
+	return record->event.key.col <= 5;
+}
+
+bool achordion_exclude(uint16_t keycode, keyrecord_t *record) {
+	(void)keycode;
+	// Exclude bottom-row modifier positions (physical keys) from Achordion.
+	const uint8_t row = record->event.key.row;
+	const uint8_t col = record->event.key.col;
+	// Left Ctrl/Alt/Cmd, Right Cmd, Right Fn position, Right Ctrl (per keyboard.json matrix)
+	// (Fn position often repurposed to Right Alt in VIA)
+	return (row == 5 && (col == 0 || col == 1 || col == 2 || col == 9 || col == 10)) ||
+	       (row == 3 && col == 14);
+}
+
+typedef struct {
+	uint8_t mods1;
+	uint8_t mods2;
+} mod_pair_t;
+
+static const mod_pair_t same_hand_mod_pairs[] = {
+	// Allow same-hand Ctrl+Opt and Ctrl+Shift on both sides.
+	{ MOD_LCTL, MOD_LALT },
+	{ MOD_LCTL, MOD_LSFT },
+	{ MOD_RCTL, MOD_RALT },
+	{ MOD_RCTL, MOD_RSFT },
+};
+
+static bool same_hand_allowed_mod_chord(uint8_t mods1, uint8_t mods2) {
+	for (uint8_t i = 0; i < (uint8_t)(sizeof(same_hand_mod_pairs) / sizeof(same_hand_mod_pairs[0])); i++) {
+		if ((mods1 == same_hand_mod_pairs[i].mods1 && mods2 == same_hand_mod_pairs[i].mods2) ||
+		    (mods2 == same_hand_mod_pairs[i].mods1 && mods1 == same_hand_mod_pairs[i].mods2)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool achordion_chord(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
+                     uint16_t other_keycode, keyrecord_t *other_record) {
+	if (on_left_hand_custom(tap_hold_record) != on_left_hand_custom(other_record)) {
+		return true;
+	}
+
+	// Same-hand exception for specific mod-tap chords.
+	if (IS_QK_MOD_TAP(tap_hold_keycode) && IS_QK_MOD_TAP(other_keycode)) {
+		uint8_t mods1 = mod_config(QK_MOD_TAP_GET_MODS(tap_hold_keycode));
+		uint8_t mods2 = mod_config(QK_MOD_TAP_GET_MODS(other_keycode));
+		if (same_hand_allowed_mod_chord(mods1, mods2)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+uint16_t achordion_timeout(uint16_t tap_hold_keycode) {
+	if (IS_QK_MOD_TAP(tap_hold_keycode) &&
+	    QK_MOD_TAP_GET_MODS(tap_hold_keycode) == MOD_LSFT &&
+	    QK_MOD_TAP_GET_TAP_KEYCODE(tap_hold_keycode) == KC_F) {
+		// Longer timeout for F = Shift mod-tap to make testing easier.
+		return 5000;
+	}
+	return 1000;
+}
+
+bool achordion_eager_mod(uint8_t mod) {
+	// Disable eager mods so same-hand chords don't get shifted before Achordion decides.
+	(void)mod;
+	return false;
+}
