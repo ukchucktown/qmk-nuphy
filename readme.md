@@ -1,36 +1,84 @@
-# Quantum Mechanical Keyboard Firmware
+# NuPhy Air75 V2 (VIA) + Achordion Build Notes
 
-[![Current Version](https://img.shields.io/github/tag/qmk/qmk_firmware.svg)](https://github.com/qmk/qmk_firmware/tags)
-[![Discord](https://img.shields.io/discord/440868230475677696.svg)](https://discord.gg/Uq7gcHh)
-[![Docs Status](https://img.shields.io/badge/docs-ready-orange.svg)](https://docs.qmk.fm)
-[![GitHub contributors](https://img.shields.io/github/contributors/qmk/qmk_firmware.svg)](https://github.com/qmk/qmk_firmware/pulse/monthly)
-[![GitHub forks](https://img.shields.io/github/forks/qmk/qmk_firmware.svg?style=social&label=Fork)](https://github.com/qmk/qmk_firmware/)
+This keymap adds Achordion to the stock VIA firmware without changing the key layout.
+It is set up for the NuPhy fork of QMK on branch `nuphy-keyboards`.
 
-This is a keyboard firmware based on the [tmk\_keyboard firmware](https://github.com/tmk/tmk_keyboard) with some useful features for Atmel AVR and ARM controllers, and more specifically, the [OLKB product line](https://olkb.com), the [ErgoDox EZ](https://ergodox-ez.com) keyboard, and the Clueboard product line.
+## Why the non-module Achordion install
+The Achordion community-module flow ("modules" in `keymap.json`) is not wired up in this NuPhy fork.
+Using the non-module install (local `achordion.c`/`achordion.h` in the keymap folder) is the reliable path here.
 
-## Documentation
+## Files added or changed
+- `keyboards/nuphy/air75_v2/ansi/keymaps/via/achordion.c`
+- `keyboards/nuphy/air75_v2/ansi/keymaps/via/achordion.h`
+- `keyboards/nuphy/air75_v2/ansi/keymaps/via/keymap.c` (hooks `process_achordion()` and `achordion_task()`)
+- `keyboards/nuphy/air75_v2/ansi/keymaps/via/rules.mk` (`SRC += achordion.c`)
+- `scripts/build_air75_v2_via.sh` (build helper)
 
-* [See the official documentation on docs.qmk.fm](https://docs.qmk.fm)
+## Prerequisites
+- The NuPhy QMK fork: `https://github.com/nuphy-src/qmk_firmware`
+- QMK submodules initialized
+- QMK CLI installed via Homebrew (`/opt/homebrew/bin/qmk`)
+- ARM GCC toolchain for ChibiOS
 
-The docs are powered by [Docsify](https://docsify.js.org/) and hosted on [GitHub](/docs/). They are also viewable offline; see [Previewing the Documentation](https://docs.qmk.fm/#/contributing?id=previewing-the-documentation) for more details.
+## One-time setup
+1. Clone and enter the NuPhy fork.
+   ```sh
+   git clone https://github.com/nuphy-src/qmk_firmware.git
+   cd qmk_firmware
+   git checkout nuphy-keyboards
+   ```
 
-You can request changes by making a fork and opening a [pull request](https://github.com/qmk/qmk_firmware/pulls), or by clicking the "Edit this page" link at the bottom of any page.
+2. Initialize and update submodules.
+   ```sh
+   git submodule update --init --recursive
+   ```
 
-## Supported Keyboards
+3. Install Python deps for the Homebrew QMK CLI.
+   The Homebrew `qmk` CLI uses its own Python under the Cellar. Use the formula prefix:
+   ```sh
+   \"$(brew --prefix qmk)/libexec/bin/python\" -m pip install -r requirements.txt
+   ```
 
-* [Planck](/keyboards/planck/)
-* [Preonic](/keyboards/preonic/)
-* [ErgoDox EZ](/keyboards/ergodox_ez/)
-* [Clueboard](/keyboards/clueboard/)
-* [Cluepad](/keyboards/clueboard/17/)
-* [Atreus](/keyboards/atreus/)
+4. Install the ARM toolchain and binutils.
+   ```sh
+   brew install arm-none-eabi-gcc@8 arm-none-eabi-binutils
+   ```
 
-The project also includes community support for [lots of other keyboards](/keyboards/).
+## Build
+Use the helper script (recommended):
+```sh
+./scripts/build_air75_v2_via.sh
+```
 
-## Maintainers
+Or run directly with the required PATH overrides:
+```sh
+PATH="/opt/homebrew/opt/arm-none-eabi-gcc@8/bin:/opt/homebrew/opt/arm-none-eabi-binutils/bin:$PATH" \
+  qmk compile -kb nuphy/air75_v2/ansi -km via
+```
 
-QMK is developed and maintained by Jack Humbert of OLKB with contributions from the community, and of course, [Hasu](https://github.com/tmk). The OLKB product firmwares are maintained by [Jack Humbert](https://github.com/jackhumbert), the Ergodox EZ by [ZSA Technology Labs](https://github.com/zsa), the Clueboard by [Zach White](https://github.com/skullydazed), and the Atreus by [Phil Hagelberg](https://github.com/technomancy).
+## Output
+Successful builds produce:
+- `.build/nuphy_air75_v2_ansi_via.bin`
+- `.build/nuphy_air75_v2_ansi_via.hex`
+- `nuphy_air75_v2_ansi_via.bin` (copied to repo root by QMK)
 
-## Official Website
+## Common errors and fixes
+- `startup_stm32f0xx.mk: No such file or directory`
+  - Fix: `git submodule update --init --recursive`
 
-[qmk.fm](https://qmk.fm) is the official website of QMK, where you can find links to this page, the documentation, and the keyboards supported by QMK.
+- `Could not find module appdirs!`
+  - Fix: install `requirements.txt` using the Homebrew QMK Python:
+    `\"$(brew --prefix qmk)/libexec/bin/python\" -m pip install -r requirements.txt`
+
+- `arm-none-eabi-gcc: command not found`
+  - Fix: `brew install arm-none-eabi-gcc@8`
+
+- `stdint.h: No such file or directory` with ARM GCC 15.x
+  - Fix: use `arm-none-eabi-gcc@8` (includes the needed newlib headers).
+
+- `arm-none-eabi-ar: command not found`
+  - Fix: `brew install arm-none-eabi-binutils` and include it on PATH.
+
+## Notes
+- Achordion only affects tap-hold keys (mod-tap or layer-tap). Assign any mod-tap in VIA to test behavior.
+- VIA dynamic keymap data should remain intact across firmware flashes unless you reset EEPROM.
